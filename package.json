@@ -1,0 +1,16 @@
+{
+    "name": "blogt-monorepo",
+    "version": "1.0.0",
+    "private": true,
+    "workspaces": [
+        "blogt-api",
+        "blogt-editor",
+        "blogtv"
+    ],
+    "scripts": {
+        "start:api": "npm run start --workspace=blogt-api",
+        "start:editor": "npm run start --workspace=blogt-editor",
+        "start:tv": "npm run dev --workspace=blogtv",
+        "install:all": "npm install"
+    }
+}

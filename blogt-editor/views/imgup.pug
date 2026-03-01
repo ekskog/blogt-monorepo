@@ -1,0 +1,17 @@
+extends layout
+block content
+  .editor-container
+    form(action="/images/imgup" method="POST" enctype="multipart/form-data")
+      .editor-form-group.formGroup
+
+      .editor-form-group
+        label(for="file") Choose File:
+        input#file(type="file" name="file" required)
+
+      .editor-form-group
+        label.editor-label(for="date") Select a date:
+        input#date(type="date" name="date" required)
+
+            
+      .editor-form-actions
+        button.submit-btn(type="submit") Submit

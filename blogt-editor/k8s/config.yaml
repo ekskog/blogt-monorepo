@@ -1,0 +1,35 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  namespace: blogt
+  name: minio-credentials
+type: Opaque
+stringData:
+  accessKey: lucarv
+  secretKey: lucaPWD4MinI0-MJR
+  endpoint: 192.168.1.8
+  bucket: blotpix
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  namespace: blogt
+  name: editor-credentials
+type: Opaque
+stringData:
+  accessKey: lucarv
+  secretKey: lucaPWD$b10gt
+  sessionSecret: YV92ZXJ5X2xvbmdfcmFuZG9tX3N0cmluZ191c2VkX3RvX3Byb3RlY3RfYmxvZ3RfZWRpdG9y
+  turnstileSiteKey: 0x4AAAAAAB8a9NFuZq2UiiUf
+  turnstileSecretKey: 0x4AAAAAAB8a9FoyZZ7MglmgWGgQnI9sVJE
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: blogt
+  name: editor-config
+data:
+  minioServiceURL: 192.168.1.8
+  blogtEditorServiceName: blogt-editor
+  DEBUG: "blogt-editor:*"
+  BLOGT_API_BASE_URL: http://blogt-api:3000

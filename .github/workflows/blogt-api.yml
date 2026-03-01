@@ -1,0 +1,73 @@
+name: Deploy blogt-api
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'blogt-api/**' # Only trigger when the API folder changes
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./blogt-api # Ensure commands run from inside the API folder
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set Environment Variables
+        run: |
+          IMAGE_NAME=ghcr.io/ekskog/blogt-api
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          IMAGE_TAG=$IMAGE_NAME:$SHORT_SHA
+          echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_ENV
+          echo "SHORT_SHA=$SHORT_SHA" >> $GITHUB_ENV
+          echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV        
+
+      - name: Login to GitHub Container Registry
+        run: docker login ghcr.io -u $GITHUB_ACTOR --password ${{ secrets.EK_GITHUB_PAT }}
+
+      - name: Build and Push Docker Image
+        run: |
+          IMAGE_NAME=ghcr.io/ekskog/blogt-api
+          IMAGE_TAG=$IMAGE_NAME:$SHORT_SHA
+          LATEST_TAG=$IMAGE_NAME:latest
+          echo "Resolved IMAGE_TAG: $IMAGE_TAG"
+          echo "Resolved LATEST_TAG: $LATEST_TAG"
+          docker buildx build --platform linux/amd64 -t $IMAGE_TAG -t $LATEST_TAG --push .
+      
+      - name: Set Up KUBECONFIG
+        run: |
+          echo "${{ secrets.KUBECONFIG_FILE_CONTENT }}" > kubeconfig.yaml
+          export KUBECONFIG=$PWD/kubeconfig.yaml
+          echo "KUBECONFIG set to $KUBECONFIG"
+                    
+      - name: Verify image exists before deployment
+        run: |
+          echo "Verifying image exists: $IMAGE_TAG"
+          docker manifest inspect $IMAGE_TAG
+                    
+      - name: Deploy to Kubernetes
+        run: |
+          echo "Deploying image: $IMAGE_TAG"
+          
+          # Update the deployment manifest with the correct image tag and apply it
+          sed "s|ghcr.io/ekskog/blogt-api:latest|$IMAGE_TAG|g" k8s/deployment.yaml | kubectl apply -f - --kubeconfig=$PWD/kubeconfig.yaml
+          
+          # Apply other manifests
+          kubectl apply -f k8s/service.yaml --kubeconfig=$PWD/kubeconfig.yaml
+          kubectl apply -f k8s/auto-scaler.yaml --kubeconfig=$PWD/kubeconfig.yaml
+
+          # Wait for rollout
+          kubectl rollout status deployment/blogt-api --namespace=blogt --kubeconfig=$PWD/kubeconfig.yaml --timeout=600s
+
+      - name: Debug on Failure
+        if: failure()
+        run: |
+          echo "Deployment failed. Gathering debug information..."
+          kubectl describe deployment blogt-api --namespace=blogt --kubeconfig=$PWD/kubeconfig.yaml
+          kubectl describe pods -l app=blogt-api --namespace=blogt --kubeconfig=$PWD/kubeconfig.yaml
+          kubectl logs -l app=blogt-api --namespace=blogt --kubeconfig=$PWD/kubeconfig.yaml --tail=50

@@ -1,0 +1,39 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: blogt
+  name: blogt-frontend
+  labels:
+    app: blogt-frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: blogt-frontend
+  template:
+    metadata:
+      labels:
+        app: blogt-frontend
+    spec:
+      containers:
+        - name: blogt-frontend
+          image: ghcr.io/ekskog/blogtv:latest
+          imagePullPolicy: Always
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi" 
+              cpu: "500m" 
+          ports:
+            - containerPort: 80
+              name: blogt
+          volumeMounts:
+            - name: blogposts
+              mountPath: /app/posts
+      volumes:
+        - name: blogposts
+          persistentVolumeClaim:
+            claimName: blogt-nfspvc
