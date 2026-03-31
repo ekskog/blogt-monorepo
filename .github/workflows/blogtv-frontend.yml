@@ -4,10 +4,7 @@ on:
   push:
     branches:
       - main
-    paths:
-      - 'blogtv/**'
-      - '.github/workflows/blogtv-frontend.yml'
-  workflow_dispatch: # Allows manual triggering
+  workflow_dispatch:
 
 jobs:
   build-and-deploy:
@@ -22,6 +19,11 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Diagnostic - List Workspace
+        run: |
+          echo "Current directory: $PWD"
+          ls -R
 
       - name: Set Environment Variables
         run: |

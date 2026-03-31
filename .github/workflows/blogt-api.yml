@@ -4,9 +4,6 @@ on:
   push:
     branches:
       - main
-    paths:
-      - 'blogt-api/**'
-      - '.github/workflows/blogt-api.yml'
   workflow_dispatch:
 
 jobs:
@@ -22,6 +19,11 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Diagnostic - List Workspace
+        run: |
+          echo "Current directory: $PWD"
+          ls -R
 
       - name: Set Environment Variables
         run: |
