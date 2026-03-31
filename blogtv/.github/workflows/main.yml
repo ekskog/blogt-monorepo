@@ -29,7 +29,7 @@ jobs:
           LATEST_TAG=$IMAGE_NAME:latest
           echo "Resolved IMAGE_TAG: $IMAGE_TAG"
           echo "Resolved LATEST_TAG: $LATEST_TAG"
-          docker buildx build --platform linux/amd64 -t $IMAGE_TAG -t $LATEST_TAG --push .
+          docker buildx build --platform linux/amd64 -t $IMAGE_TAG -t $LATEST_TAG --build-arg VITE_GEMINI_API_KEY=${{ secrets.VITE_GEMINI_API_KEY }} --push .
       
       - name: Set Up KUBECONFIG
         run: |
