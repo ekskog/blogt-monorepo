@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - 'blogt-api/**'
+      - '.github/workflows/blogt-api.yml'
   workflow_dispatch:
 
 jobs:

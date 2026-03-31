@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - 'blogtv/**'
+      - '.github/workflows/blogtv-frontend.yml'
   workflow_dispatch: # Allows manual triggering
 
 jobs:
