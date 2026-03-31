@@ -12,9 +12,6 @@ jobs:
     permissions:
       contents: read
       packages: write
-    defaults:
-      run:
-        working-directory: ./blogt-api # Ensure commands run from inside the API folder
 
     steps:
       - name: Checkout code
@@ -24,6 +21,9 @@ jobs:
         run: |
           echo "Current directory: $PWD"
           ls -R
+          echo "Checking Secrets Visibility..."
+          if [ -z "${{ secrets.GITHUB_TOKEN }}" ]; then echo "GITHUB_TOKEN is MISSING"; else echo "GITHUB_TOKEN is present"; fi
+          if [ -z "${{ secrets.KUBECONFIG_FILE_CONTENT }}" ]; then echo "KUBECONFIG_FILE_CONTENT is MISSING"; else echo "KUBECONFIG_FILE_CONTENT is present"; fi
 
       - name: Set Environment Variables
         run: |
@@ -45,6 +45,7 @@ jobs:
 
       - name: Build and Push Docker Image
         run: |
+          cd blogt-api
           docker build --platform linux/amd64 -t ${{ env.IMAGE_TAG }} -t ${{ env.IMAGE_NAME }}:latest .
           docker push ${{ env.IMAGE_TAG }}
           docker push ${{ env.IMAGE_NAME }}:latest
