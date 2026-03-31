@@ -71,10 +71,10 @@
           {{ showExifData ? 'Hide EXIF Data' : 'Show EXIF Data' }}
         </button>
         <button
-          @click="toggleAzEyeData"
+          @click="toggleGeminiData"
           class="px-2 py-1 sm:px-3 sm:py-2 text-xs border border-gray-300 bg-gray-100 rounded hover:bg-gray-200"
         >
-          {{ showAzEyeData ? 'Hide AzEye Data' : 'Show AzEye Data' }}
+          {{ showGeminiData ? 'Hide AI Analysis' : 'AI Analysis' }}
         </button>
       </div>
 
@@ -83,9 +83,9 @@
         <ExifViewer :initialImageUrl="getImageUrl(post)" />
       </div>
 
-      <!-- Azure Eye Viewer -->
-      <div v-if="showAzEyeData" class="mt-5 mb-5 p-4 border border-gray-300 rounded bg-gray-200">
-        <AzureViewer :initialImageUrl="getImageUrl(post)" />
+      <!-- Gemini AI Viewer -->
+      <div v-show="showGeminiData" class="mt-5 mb-5 p-4 border border-gray-300 rounded bg-gray-200">
+        <GeminiViewer :initialImageUrl="getImageUrl(post)" />
       </div>
 
       <!-- Markdown Content -->
@@ -151,20 +151,20 @@ import { postStore } from '@/stores/posts'
 import { marked } from 'marked'
 import CryptoJS from 'crypto-js'
 import ExifViewer from './ExifViewer.vue' // Import ExifViewer component
-import AzureViewer from './AzureViewer.vue' // Import AzureViewer component
+import GeminiViewer from './GeminiViewer.vue' // Import GeminiViewer component
 
 export default {
   name: 'BlogPost',
   components: {
     ExifViewer,
-    AzureViewer,
+    GeminiViewer,
   },
   data() {
     return {
       date: this.$route.params.date,
       post: postStore.currentPost,
       showExifData: false,
-      showAzEyeData: false,
+      showGeminiData: false,
       showImageModal: false, // New data property for image modal
       loading: false,
       imageLoading: true, // Added for image loading state
@@ -234,8 +234,8 @@ export default {
     toggleExifData() {
       this.showExifData = !this.showExifData
     },
-    toggleAzEyeData() {
-      this.showAzEyeData = !this.showAzEyeData
+    toggleGeminiData() {
+      this.showGeminiData = !this.showGeminiData
     },
 
     onImageLoaded() {
