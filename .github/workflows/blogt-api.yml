@@ -24,10 +24,9 @@ jobs:
         run: |
           IMAGE_NAME=ghcr.io/ekskog/blogt-api
           SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
-          IMAGE_TAG=$IMAGE_NAME:$SHORT_SHA
           echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_ENV
           echo "SHORT_SHA=$SHORT_SHA" >> $GITHUB_ENV
-          echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV        
+          echo "IMAGE_TAG=$IMAGE_NAME:$SHORT_SHA" >> $GITHUB_ENV
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
@@ -41,10 +40,8 @@ jobs:
 
       - name: Build and Push Docker Image
         run: |
-          LATEST_TAG=${{ env.IMAGE_NAME }}:latest
-          echo "Resolved IMAGE_TAG: ${{ env.IMAGE_TAG }}"
-          echo "Resolved LATEST_TAG: $LATEST_TAG"
-          docker buildx build --platform linux/amd64 -t ${{ env.IMAGE_TAG }} -t $LATEST_TAG --push .
+          echo "Building image: ${{ env.IMAGE_TAG }}"
+          docker buildx build --platform linux/amd64 -t ${{ env.IMAGE_TAG }} -t ${{ env.IMAGE_NAME }}:latest --push .
       
       - name: Set Up KUBECONFIG
         run: |
@@ -53,8 +50,8 @@ jobs:
                     
       - name: Verify image exists before deployment
         run: |
-          echo "Verifying image exists: $IMAGE_TAG"
-          docker manifest inspect $IMAGE_TAG
+          echo "Verifying image exists: ${{ env.IMAGE_TAG }}"
+          docker manifest inspect ${{ env.IMAGE_TAG }}
                     
       - name: Deploy to Kubernetes
         run: |
@@ -68,7 +65,7 @@ jobs:
           kubectl apply -f k8s/auto-scaler.yaml
 
           # Wait for rollout
-          kubectl rollout status deployment/blogt-api --namespace=blogt --kubeconfig=$PWD/kubeconfig.yaml --timeout=600s
+          kubectl rollout status deployment/blogt-api --namespace=blogt --timeout=600s
 
       - name: Debug on Failure
         if: failure()
