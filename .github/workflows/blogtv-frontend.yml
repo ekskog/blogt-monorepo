@@ -47,17 +47,14 @@ jobs:
       - name: Set Up KUBECONFIG
         run: |
           echo "${{ secrets.KUBECONFIG_FILE_CONTENT }}" > kubeconfig.yaml
-          export KUBECONFIG=$PWD/kubeconfig.yaml
-          echo "KUBECONFIG set to $KUBECONFIG"
+          echo "KUBECONFIG=$PWD/kubeconfig.yaml" >> $GITHUB_ENV
                     
       - name: Deploy to Kubernetes
         run: |
-          IMAGE_NAME=ghcr.io/ekskog/blogtv
-          IMAGE_TAG=$IMAGE_NAME:${{ env.SHORT_SHA }}
-          echo "Deploying image: $IMAGE_TAG"
+          echo "Deploying image: ${{ env.IMAGE_TAG }}"
           
           # Use sed for simple image replacement and apply to k8s
-          sed "s|ghcr.io/ekskog/blogtv:latest|$IMAGE_TAG|g" k8s/deployment.yaml | kubectl apply -f - --kubeconfig=$PWD/kubeconfig.yaml
+          sed "s|ghcr.io/ekskog/blogtv:latest|${{ env.IMAGE_TAG }}|g" k8s/deployment.yaml | kubectl apply -f -
           
           # Rollout status
-          kubectl rollout status deployment/blogt-frontend --namespace=blogt --kubeconfig=$PWD/kubeconfig.yaml --timeout=600s
+          kubectl rollout status deployment/blogt-frontend --namespace=blogt --timeout=600s

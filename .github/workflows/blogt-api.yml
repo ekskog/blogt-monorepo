@@ -47,8 +47,7 @@ jobs:
       - name: Set Up KUBECONFIG
         run: |
           echo "${{ secrets.KUBECONFIG_FILE_CONTENT }}" > kubeconfig.yaml
-          export KUBECONFIG=$PWD/kubeconfig.yaml
-          echo "KUBECONFIG set to $KUBECONFIG"
+          echo "KUBECONFIG=$PWD/kubeconfig.yaml" >> $GITHUB_ENV
                     
       - name: Verify image exists before deployment
         run: |
@@ -57,14 +56,14 @@ jobs:
                     
       - name: Deploy to Kubernetes
         run: |
-          echo "Deploying image: $IMAGE_TAG"
+          echo "Deploying image: ${{ env.IMAGE_TAG }}"
           
           # Update the deployment manifest with the correct image tag and apply it
-          sed "s|ghcr.io/ekskog/blogt-api:latest|$IMAGE_TAG|g" k8s/deployment.yaml | kubectl apply -f - --kubeconfig=$PWD/kubeconfig.yaml
+          sed "s|ghcr.io/ekskog/blogt-api:latest|${{ env.IMAGE_TAG }}|g" k8s/deployment.yaml | kubectl apply -f -
           
           # Apply other manifests
-          kubectl apply -f k8s/service.yaml --kubeconfig=$PWD/kubeconfig.yaml
-          kubectl apply -f k8s/auto-scaler.yaml --kubeconfig=$PWD/kubeconfig.yaml
+          kubectl apply -f k8s/service.yaml
+          kubectl apply -f k8s/auto-scaler.yaml
 
           # Wait for rollout
           kubectl rollout status deployment/blogt-api --namespace=blogt --kubeconfig=$PWD/kubeconfig.yaml --timeout=600s
@@ -73,6 +72,6 @@ jobs:
         if: failure()
         run: |
           echo "Deployment failed. Gathering debug information..."
-          kubectl describe deployment blogt-api --namespace=blogt --kubeconfig=$PWD/kubeconfig.yaml
-          kubectl describe pods -l app=blogt-api --namespace=blogt --kubeconfig=$PWD/kubeconfig.yaml
-          kubectl logs -l app=blogt-api --namespace=blogt --kubeconfig=$PWD/kubeconfig.yaml --tail=50
+          kubectl describe deployment blogt-api --namespace=blogt
+          kubectl describe pods -l app=blogt-api --namespace=blogt
+          kubectl logs -l app=blogt-api --namespace=blogt --tail=50
