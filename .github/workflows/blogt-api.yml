@@ -5,7 +5,8 @@ on:
     branches:
       - main
     paths:
-      - 'blogt-api/**' # Only trigger when the API folder changes
+      - 'blogt-api/**'
+  workflow_dispatch:
 
 jobs:
   build-and-deploy:

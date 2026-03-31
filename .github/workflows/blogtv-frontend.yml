@@ -5,7 +5,8 @@ on:
     branches:
       - main
     paths:
-      - 'blogtv/**' # Only trigger when the frontend folder changes
+      - 'blogtv/**'
+  workflow_dispatch: # Allows manual triggering
 
 jobs:
   build-and-deploy:
