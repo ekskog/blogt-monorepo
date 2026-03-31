@@ -1,5 +1,4 @@
 name: Deploy blogt-api
-name: Deploy blogt-api
 
 on:
   push:
@@ -68,12 +67,6 @@ jobs:
           kubectl rollout status deployment/blogt-api --namespace=blogt --timeout=600s
 
       - name: Debug on Failure
-        if: failure()
-        run: |
-          echo "Deployment failed. Gathering debug information..."
-          kubectl describe deployment blogt-api --namespace=blogt
-          kubectl describe pods -l app=blogt-api --namespace=blogt
-          kubectl logs -l app=blogt-api --namespace=blogt --tail=50
         if: failure()
         run: |
           echo "Deployment failed. Gathering debug information..."
