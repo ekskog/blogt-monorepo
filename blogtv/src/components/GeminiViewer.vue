@@ -67,7 +67,22 @@
       </div>
       
       <div v-else-if="!loading && !error" class="info-message">
-        Waiting for image analysis...
+        <div v-if="!result">
+          <p class="mb-2">No analysis yet. Click to run AI analysis (on-demand only).</p>
+          <div>
+            <button
+              class="px-3 py-1 sm:px-4 sm:py-2 bg-white text-black font-bold text-sm rounded border border-gray-300 hover:bg-gray-100"
+              :disabled="loading || !initialImageUrl"
+              @click.prevent="analyzeWithGemini(initialImageUrl)"
+            >
+              {{ loading ? 'Analyzing...' : 'Run AI Analysis' }}
+            </button>
+            <span v-if="!initialImageUrl" class="text-xs text-gray-500 ml-2">No image URL available.</span>
+          </div>
+        </div>
+        <div v-else>
+          <p class="mb-2">Analysis ready. Scroll up to view results.</p>
+        </div>
       </div>
     </div>
   </div>
@@ -97,16 +112,6 @@ export default {
     }
   },
 
-  watch: {
-    initialImageUrl: {
-      immediate: true,
-      handler(newUrl) {
-        if (newUrl) {
-          this.analyzeWithGemini(newUrl)
-        }
-      },
-    },
-  },
 
   methods: {
     async analyzeWithGemini(url) {
@@ -338,6 +343,7 @@ th {
   font-weight: 600;
 }
 
+dd
 td {
   padding: 0.625rem;
   border-bottom: 1px solid #f3f4f6;

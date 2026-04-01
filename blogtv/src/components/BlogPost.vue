@@ -84,7 +84,7 @@
       </div>
 
       <!-- Gemini AI Viewer -->
-      <div v-show="showGeminiData" class="mt-5 mb-5 p-4 border border-gray-300 rounded bg-gray-200">
+      <div v-if="showGeminiData" class="mt-5 mb-5 p-4 border border-gray-300 rounded bg-gray-200">
         <GeminiViewer :initialImageUrl="getImageUrl(post)" />
       </div>
 
