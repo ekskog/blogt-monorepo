@@ -254,7 +254,7 @@ export default {
       try {
         this.loading = true
         this.imageLoading = true // Reset image loading state
-        const response = await fetch(`https://blog-api.ekskog.net/post/${date}`)
+        const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/post/${date}`)
         if (!response.ok) {
           throw new Error('error fetching post')
         } else {
@@ -279,7 +279,7 @@ export default {
 
       const dateMatch = post.match(/Date:\s*(\d{2})(\d{2})(\d{4})/)
       if (dateMatch) {
-        const [_, day, month, year] = dateMatch
+        const [, day, month, year] = dateMatch
         return `https://objects.ekskog.net/blotpix/${year}/${month}/${day}.jpeg`
       }
       console.error('Invalid Date format in metadata:', post)
@@ -401,7 +401,7 @@ export default {
 
     async checkPostExists(date) {
       try {
-        const response = await fetch(`https://blog-api.ekskog.net/post/${date}`)
+        const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/post/${date}`)
         return response.ok
       } catch (error) {
         console.error(`Error checking if post exists for ${date}:`, error)

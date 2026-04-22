@@ -192,7 +192,7 @@ export default {
       try {
         isLoading.value = true
         console.log('fetch latest posts...')
-        const response = await fetch('https://blog-api.ekskog.net/post')
+        const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/post`)
         if (!response.ok) {
           throw new Error('Failed to fetch first page posts')
         }
@@ -234,7 +234,7 @@ export default {
 
         console.log('fetchNextPage > Will Fetch:', dateToFetch)
 
-        const response = await fetch(`https://blog-api.ekskog.net/posts/from/${dateToFetch}`)
+        const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/posts/from/${dateToFetch}`)
         if (!response.ok) {
           throw new Error('Failed to fetch next posts')
         }
@@ -279,7 +279,7 @@ export default {
         const dateToFetch = `${nextDay}${nextMonth}${nextYear}`
         console.log(`Date to fetch from: ${nextDay} - ${nextMonth} - ${nextYear}`)
 
-        const response = await fetch(`https://blog-api.ekskog.net/posts/from/${dateToFetch}`)
+        const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/posts/from/${dateToFetch}`)
 
         if (!response.ok) {
           throw new Error('Failed to fetch next posts')

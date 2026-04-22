@@ -116,7 +116,7 @@ export default {
       try {
         console.log('Performing search for tag:', this.searchTag);
         const response = await fetch(
-          `https://blog-api.ekskog.net/tags/${encodeURIComponent(this.searchTag)}`,
+          `${import.meta.env.VITE_API_BASE_URL}/tags/${encodeURIComponent(this.searchTag)}`,
         );
         console.log('Response:', response);
         if (!response.ok) {

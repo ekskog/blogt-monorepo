@@ -11,8 +11,7 @@ const routes = [
     // Redirect to the latest post by fetching the first page and extracting its date
     beforeEnter: async (to, from, next) => {
       try {
-        console.log('Fetching latest post for redirect from https://blog-api.ekskog.net/post')
-        const response = await fetch('https://blog-api.ekskog.net/post')
+        const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/post`)
         if (response.ok) {
           const data = await response.json()
           if (Array.isArray(data) && data.length > 0) {
