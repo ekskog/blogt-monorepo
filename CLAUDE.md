@@ -94,7 +94,7 @@ Never hardcode API or media hostnames. In dev, `API_BASE = http://localhost:3000
 | Var | Used by | Purpose |
 |---|---|---|
 | `VITE_API_BASE` | blogtv | API host (`/api` prod). Injected as Docker build ARG in `blogtv/Dockerfile` — baked into the bundle at build time, not a runtime var. |
-| `VITE_MEDIA_BASE` | blogtv | Media host (`https://objects.ekskog.net`) |
+| `VITE_MEDIA_BASE` | blogtv | Media host (`https://objects.ekskog.net`). Also a Docker build ARG — must be in `blogtv/Dockerfile` or images break in production. |
 | `VITE_GEMINI_API_KEY` | blogtv | Gemini AI analysis in `GeminiViewer` |
 | `SESSION_SECRET` | blogt-editor | Session encryption (falls back to hardcoded string) |
 | `IN_CONTAINER` | blogt-editor | Set to `1` in Docker |
@@ -115,7 +115,19 @@ Never hardcode API or media hostnames. In dev, `API_BASE = http://localhost:3000
 {MEDIA_BASE}/blotpix/{year}/{month}/{day}.jpeg
 ```
 
-The API constructs this in `GET /post/details/:ddmmyyyy` and PUT. The frontend uses `post.imageUrl` from the response — do not recompute it client-side in `BlogPost.vue`.
+**`BlogPost.vue`** — uses `post.imageUrl` returned by `GET /post/details/:ddmmyyyy`. Do not recompute it client-side.
+
+**`BlogPosts.vue`** — receives raw markdown strings (no structured response), so it builds the image URL client-side from `MEDIA_BASE`. If `VITE_MEDIA_BASE` is not baked into the production bundle, every image in the posts list will be broken while single-post view works fine.
+
+### Local dev against the cluster
+
+The API runs in k3s, not locally. To use `npm run dev` without running `blogt-api` locally:
+
+```bash
+kubectl port-forward service/blogt-api 3000:3000 -n blogt
+```
+
+`.env` already points `VITE_API_BASE` at `http://localhost:3000`.
 
 ### Tailwind
 
