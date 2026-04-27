@@ -1,103 +1,129 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+## Packages
 
-## Repository Overview
+| Package | Role | Port |
+|---|---|---|
+| `blogt-api` | Express read API — serves posts from file-based markdown | 3000 |
+| `blogt-editor` | Express authenticated write backend + AI vision | 3001 |
+| `blogtv` | Vue 3 + Vite SPA (readers) served via Nginx in prod | 5173 dev |
 
-Three-tier blog platform using npm workspaces. No monorepo build orchestration (no Turborepo/Nx) — each package is independently deployed.
-
-- **`blogt-api`** — Express.js read API, serves blog posts from file-based markdown storage
-- **`blogt-editor`** — Express.js authenticated editing backend with AI vision integrations
-- **`blogtv`** — Vue 3 + Vite SPA for reading blog posts, served via Nginx
+No monorepo build tool. Each package is built and deployed independently.
 
 ## Commands
 
-### Root (run from repo root)
-
 ```bash
-npm run install:all     # Install all workspace dependencies
-npm run start:api       # Start blogt-api
-npm run start:editor    # Start blogt-editor
-npm run start:tv        # Start blogtv (Vite dev server)
-```
+# from repo root
+npm run install:all
+npm run start:api
+npm run start:editor
+npm run start:tv
 
-### blogtv (frontend)
-
-```bash
-cd blogtv
-npm run dev             # Vite dev server
-npm run build           # Production build
-npm run preview         # Preview production build
-npm run lint            # ESLint --fix
-npm run format          # Prettier format src/
-npm run tailwind:build  # Rebuild Tailwind CSS (watch mode)
-```
-
-### blogt-api / blogt-editor (backends)
-
-```bash
-cd blogt-api   # or blogt-editor
-npm run dev    # nodemon with DEBUG logging
-npm start      # Production start
+# per package
+npm run dev    # nodemon (api/editor) or vite dev server (blogtv)
+npm start      # production
+npm run build  # blogtv only
 ```
 
 No test suite exists in any package.
 
-## Architecture
+## Date format — critical
 
-### Data Flow
+**All dates throughout the codebase are `DDMMYYYY` (e.g. `27042026`)**, not ISO format.
+The post front-matter `Date:` field and every URL param use this format.
+`ddmmyyyyToSortKey` in `utils/utils.js` converts to a numeric sort key.
+
+## blogt-api
+
+### Routes (mounted in `app.js`)
+
+| Method | Path | Returns |
+|---|---|---|
+| GET | `/post` | Latest 10 posts as raw-markdown `string[]` |
+| GET | `/post/:ddmmyyyy` | Single post as raw-markdown `string[]` (index 0) |
+| GET | `/post/details/:ddmmyyyy` | `{date, title, tags[], content, prev, next, imageUrl}` |
+| POST | `/post/:ddmmyyyy` | Create post; fire-and-forget tag index update |
+| PUT | `/post/:ddmmyyyy` | Update post; awaited tag index update |
+| GET | `/posts/from/:ddmmyyyy` | 10 posts backwards from date as raw-markdown `string[]` |
+| GET | `/tags/:tagName` | `[{date, title}]` newest-first from `tags_index.json` |
+| GET | `/posts/archives` | `archive.json` contents |
+| GET | `/posts/buildarchives` | Rebuild archives on the fly |
+| GET | `/rss.xml` | RSS feed |
+| GET | `/health` | Kubernetes liveness probe |
+
+### Post file format
 
 ```
-blogtv (Vue 3 SPA)
-  └─ fetches from https://blog-api.ekskog.net  →  blogt-api
-       └─ reads markdown files from posts/{year}/{month}/{day}.md
-       └─ images stored in MinIO at https://objects.hbvu.su/blotpix/
+posts/{year}/{month}/{day}.md
 
-blogt-editor (authenticated)
-  └─ writes markdown files (same posts/ directory shared with blogt-api)
-  └─ handles image uploads → MinIO
-  └─ AI integrations: Azure Computer Vision, Google Cloud Vision
-```
-
-### Post Storage Format
-
-Posts are markdown files at `blogt-api/posts/{year}/{month}/{day}.md`. Each file has front-matter metadata:
-```
-Date: YYYY-MM-DD
+Date: DDMMYYYY
 Tags: tag1, tag2
 Title: Post title
 
-Post body in markdown...
+Body markdown...
 ```
 
-A `tags.json` index is maintained alongside the posts directory.
+### In-memory date cache (`utils/utils.js`)
 
-### blogtv Frontend Structure
+`_sortedDates` caches the full chronological list of post dates. **Any operation that creates or deletes a post file must call `invalidateDateCache()`** — `updateTagsIndexForPost` does this automatically. Do not call `loadSortedDates()` directly; use `getSortedDates()` (lazy, concurrent-safe).
 
-- `src/router/index.js` — routes: `/posts`, `/post/:date`, `/search`, `/explore-day`
-- `src/stores/` — Pinia state (posts store is the primary one)
-- `src/components/` — `BlogPosts`, `BlogPost`, `BlogSearch`, `ExploreDay`, `BlogNavbar`, `GeminiViewer`, `ExifViewer`
-- `src/utils/loadAlbums.js` — utility for fetching image EXIF data
-- Tailwind CSS: edit `src/assets/input.css`, output is `src/assets/output.css` (generated)
-- Path alias `@/` resolves to `./src`
+### Tags index
 
-### blogt-editor Auth
+`posts/tags_index.json` maps `tag → [{date, title}]`, sorted newest-first.
+Update it with `updateTagsIndexForPost(date, title, tags)` for single-post changes,
+or `updateTagsIndex()` for a full rebuild.
 
-Session-based auth via `utils/authMiddleware.js`. All `/text` routes require authentication. Passwords hashed with bcrypt. Session secret falls back to a hardcoded string if `SESSION_SECRET` env var is not set.
+### Debug logging
 
-## Environment Variables
+All debug output uses the `debug` package. No `console.log/error/time` in route files.
+Enable with `DEBUG=blogt-api:*` (or `blogt-editor:*`).
 
-**blogtv**: `VITE_GEMINI_API_KEY` (in `.env` or passed as Docker build arg)
+## blogtv (a VUE single page app)
 
-**blogt-editor**: `SESSION_SECRET`, `NODE_ENV`, `IN_CONTAINER` (set to `1` in Docker)
+### Config — must use for all URLs
 
-**blogt-api / blogt-editor**: `DEBUG` controls log verbosity (e.g., `blogt-api:*`)
+```js
+// src/config.js
+import { API_BASE, MEDIA_BASE } from '@/config'
+```
+
+Never hardcode API or media hostnames. In dev, `API_BASE = http://localhost:3000`. In prod, `API_BASE = /api` (proxied by Nginx to `blogt-api:3000`).
+
+### Env vars
+
+| Var | Used by | Purpose |
+|---|---|---|
+| `VITE_API_BASE` | blogtv | API host (`/api` prod). Injected as Docker build ARG in `blogtv/Dockerfile` — baked into the bundle at build time, not a runtime var. |
+| `VITE_MEDIA_BASE` | blogtv | Media host (`https://objects.ekskog.net`) |
+| `VITE_GEMINI_API_KEY` | blogtv | Gemini AI analysis in `GeminiViewer` |
+| `SESSION_SECRET` | blogt-editor | Session encryption (falls back to hardcoded string) |
+| `IN_CONTAINER` | blogt-editor | Set to `1` in Docker |
+| `MEDIA_BASE` | blogt-api | Media host for `imageUrl` in responses |
+| `DEBUG` | api + editor | Log verbosity |
+
+### `postStore` is not reactive
+
+`src/stores/posts.js` is a **plain object**, not Pinia. It does not trigger Vue reactivity. Components must copy values into `data()` or local `ref()` and refresh them explicitly.
+
+### `BlogPost.vue` fetches its own data
+
+`BlogPost` always fetches `GET /post/details/:date` on route change (watch on `$route.params.date`). It does not rely on `postStore.currentPost` for initial render. Navigation uses `post.prev`/`post.next` from the API response — no client-side date walking.
+
+### Image URL pattern
+
+```
+{MEDIA_BASE}/blotpix/{year}/{month}/{day}.jpeg
+```
+
+The API constructs this in `GET /post/details/:ddmmyyyy` and PUT. The frontend uses `post.imageUrl` from the response — do not recompute it client-side in `BlogPost.vue`.
+
+### Tailwind
+
+Edit `src/assets/tailwind.css`. Output is generated — do not edit `src/assets/output.css` directly.
+Path alias: `@/` → `./src`.
 
 ## Deployment
 
-CI/CD via GitHub Actions (`.github/workflows/`). On push to `main`:
-1. Docker image built and pushed to `ghcr.io/ekskog/`
-2. Deployed to Kubernetes namespace `blogt`
-3. Kubernetes configs live in `k8s/` within each service directory
+Push to `main` → GitHub Actions builds Docker images → pushes to `ghcr.io/ekskog/` → deploys to Kubernetes namespace `blogt`. K8s manifests are in `k8s/` inside each package directory.
 
-The frontend Dockerfile is multi-stage: Node 20-alpine build → nginx:alpine serve. The `nginx.conf` handles SPA routing with `try_files $uri /index.html`.
+Nginx (`blogtv/nginx.conf`) proxies `/api/*` → `blogt-api:3000/` and serves the Vue SPA with `try_files $uri /index.html`.
