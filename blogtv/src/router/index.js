@@ -3,15 +3,15 @@ import Posts from '@/components/BlogPosts.vue'
 import Post from '@/components/BlogPost.vue'
 import Search from '@/components/BlogSearch.vue'
 import ExploreDay from '@/components/BlogExploreDay.vue'
+import { API_BASE } from '@/config'
 
 const routes = [
   {
     path: '/',
     name: 'home',
-    // Redirect to the latest post by fetching the first page and extracting its date
     beforeEnter: async (to, from, next) => {
       try {
-        const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/post`)
+        const response = await fetch(`${API_BASE}/post`)
         if (response.ok) {
           const data = await response.json()
           if (Array.isArray(data) && data.length > 0) {

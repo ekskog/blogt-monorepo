@@ -58,6 +58,8 @@
 </template>
 
 <script>
+import { MEDIA_BASE } from '@/config'
+
 export default {
   name: 'BlogExploreDay',
   data() {
@@ -139,7 +141,7 @@ export default {
     },
 
     async checkImageExists(day, month, year) {
-      const imageUrl = `https://objects.ekskog.net/blotpix/${year}/${month}/${day}.jpeg`;
+      const imageUrl = `${MEDIA_BASE}/blotpix/${year}/${month}/${day}.jpeg`;
 
       try {
         // Create a new Image object to check if the image exists

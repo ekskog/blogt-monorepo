@@ -1,12 +1,52 @@
 const debug = require("debug")("blogt-api:utils");
-const { get } = require("http");
 const path = require("path");
 const fs = require("fs").promises;
 const postsDir = path.join(__dirname, "..", "posts");
 
-const fetchBuckets = async () => {
-  return buckets;
-};
+let _sortedDates = null;
+let _loadingDates = null;
+
+const ddmmyyyyToSortKey = (d) =>
+  parseInt(`${d.slice(4)}${d.slice(2, 4)}${d.slice(0, 2)}`, 10);
+
+async function loadSortedDates() {
+  const result = [];
+  const years = await fs.readdir(postsDir);
+  for (const year of years) {
+    const yearPath = path.join(postsDir, year);
+    if (!(await fs.stat(yearPath)).isDirectory()) continue;
+    const months = await fs.readdir(yearPath);
+    for (const month of months) {
+      const monthPath = path.join(yearPath, month);
+      if (!(await fs.stat(monthPath)).isDirectory()) continue;
+      const days = await fs.readdir(monthPath);
+      for (const dayFile of days) {
+        if (!dayFile.endsWith(".md")) continue;
+        const day = dayFile.slice(0, 2);
+        result.push(`${day}${month}${year}`);
+      }
+    }
+  }
+  result.sort((a, b) => ddmmyyyyToSortKey(a) - ddmmyyyyToSortKey(b));
+  return result;
+}
+
+async function getSortedDates() {
+  if (_sortedDates) return _sortedDates;
+  if (!_loadingDates) {
+    _loadingDates = loadSortedDates().then((d) => {
+      _sortedDates = d;
+      _loadingDates = null;
+      return d;
+    });
+  }
+  return _loadingDates;
+}
+
+function invalidateDateCache() {
+  _sortedDates = null;
+  _loadingDates = null;
+}
 
 const findLatestPost = async () => {
   let latestPostDate = null;
@@ -15,35 +55,23 @@ const findLatestPost = async () => {
   try {
     const years = await fs.readdir(postsDir);
     for (const year of years) {
-      // Only proceed if it's a directory
       const yearPath = path.join(postsDir, year);
-      if (!(await fs.stat(yearPath)).isDirectory()) {
-        continue;
-      }
+      if (!(await fs.stat(yearPath)).isDirectory()) continue;
 
       const monthsDir = path.join(postsDir, year);
       const months = await fs.readdir(monthsDir);
 
       for (const month of months) {
-        // Only proceed if it's a directory
         const monthPath = path.join(monthsDir, month);
-        if (!(await fs.stat(monthPath)).isDirectory()) {
-          continue;
-        }
+        if (!(await fs.stat(monthPath)).isDirectory()) continue;
 
         const daysDir = path.join(monthsDir, month);
         const days = await fs.readdir(daysDir);
 
         for (const day of days) {
           const dayRegex = /^(0[1-9]|[12][0-9]|3[01])\.md$/;
-
-          if (!dayRegex.test(day)) {
-            continue;
-          }
-          // Only process markdown files
-          if (!day.endsWith(".md")) {
-            continue;
-          }
+          if (!dayRegex.test(day)) continue;
+          if (!day.endsWith(".md")) continue;
 
           const postPath = path.join(year, month, day);
           const dateParts = postPath.split("/");
@@ -65,68 +93,16 @@ const findLatestPost = async () => {
   }
 };
 
-async function extractFromDate(dateString) {
-  // Extract day, month, and year from the string
-  const day = parseInt(dateString.substring(0, 2), 10);
-  const month = parseInt(dateString.substring(2, 4), 10) - 1; // Months are 0-based in JavaScript
-  const year = parseInt(dateString.substring(4, 8), 10);
-
-  return new Date(year, month, day);
-}
-
 async function getNext(dateString) {
-  let date = await extractFromDate(dateString);
-  debug("Getting next date from:", date);
-
-  let iterations = 0;
-  while (iterations < 365) {
-    iterations++;
-    date.setDate(date.getDate() + 1);
-    const nextYear = date.getFullYear().toString();
-    const nextMonth = (date.getMonth() + 1).toString().padStart(2, "0");
-    const nextDay = date.getDate().toString().padStart(2, "0");
-    const filePath = path.join(postsDir, nextYear, nextMonth, `${nextDay}.md`);
-
-    try {
-      await fs.access(filePath);
-      return `${nextDay}${nextMonth}${nextYear}`;
-      debug("Found next date:", `${nextDay}${nextMonth}${nextYear}`);
-    } catch (error) {
-      // Continue to next date
-    }
-  }
+  const dates = await getSortedDates();
+  const idx = dates.indexOf(dateString);
+  return idx >= 0 && idx < dates.length - 1 ? dates[idx + 1] : undefined;
 }
 
 async function getPrev(dateString) {
-  let date = await extractFromDate(dateString);
-  debug("Getting previous date from:", date);
-  let iterations = 0;
-  while (iterations < 365) {
-    iterations++;
-    date.setDate(date.getDate() - 1);
-    // Format the date back to DDMMYYYY
-    const previousDay = String(date.getDate()).padStart(2, "0");
-    const previousMonth = String(date.getMonth() + 1).padStart(2, "0"); // Months are 0-based in JavaScript
-    const previousYear = date.getFullYear().toString();
-    const filePath = path.join(
-      postsDir,
-      previousYear,
-      previousMonth,
-      `${previousDay}.md`
-    );
-
-    try {
-      await fs.access(filePath);
-      return `${previousDay}${previousMonth}${previousYear}`;
-      debug("Found previous date:", `${previousDay}${previousMonth}${previousYear}`);
-    } catch (error) {
-      // Log the missing entry
-      debug(
-        `No entry found for ${previousYear}-${previousMonth}-${previousDay}. Checking previous date...`
-      );
-      // Continue to previous date
-    }
-  }
+  const dates = await getSortedDates();
+  const idx = dates.indexOf(dateString);
+  return idx > 0 ? dates[idx - 1] : undefined;
 }
 
 const formatDate = async (dateString) => {
@@ -141,15 +117,12 @@ const formatDate = async (dateString) => {
 };
 
 const formatDates = async (inputDate) => {
-  // Ensure input is in DDMMYYYY format
   const day = inputDate.substring(0, 2);
   const month = inputDate.substring(2, 4);
   const year = inputDate.substring(4, 8);
 
-  // Create the formatted string 'YYYY/MM/DD.md'
   const latestPostPath = `${year}/${month}/${day}.md`;
 
-  // Create the full ISO date string "YYYY-MM-DDT00:00:00.000Z"
   const latestPostDate = new Date(
     `${year}-${month}-${day}T00:00:00.000Z`
   ).toISOString();
@@ -160,9 +133,8 @@ const formatDates = async (inputDate) => {
 const getPostsArray = async (dateString) => {
   try {
     const postsArray = [];
-    const postsPerPage = 10; // Number of posts per page
+    const postsPerPage = 10;
 
-    // Loop to get the posts for the requested page
     for (let i = 0; i < postsPerPage; i++) {
       const day = dateString.slice(0, 2);
       const month = dateString.slice(2, 4);
@@ -174,50 +146,65 @@ const getPostsArray = async (dateString) => {
         const data = await fs.readFile(filePath, "utf-8");
         postsArray.push(data);
         dateString = await getPrev(dateString);
-        if (!dateString) {
-          break;
-        } else {
-          debug("Posts to display" + postsArray.length);
-        }
+        if (!dateString) break;
       } catch (err) {
         debug(err);
-        console.error(`No post found for ${year}-${month}-${day}`);
         dateString = await getPrev(dateString);
-        // Continue to next date if file does not exist
+        if (!dateString) break;
       }
     }
     return postsArray;
   } catch (error) {
-    console.error("Error fetching posts:", error);
-    res.status(500).json({ error: "Internal server error" });
+    debug("Error fetching posts:", error);
+    return [];
   }
 };
 
-async function updateTagsIndex() { // allow this to run in background
+async function updateTagsIndexForPost(date, title, tags) {
+  const indexPath = path.join(postsDir, "tags_index.json");
+  let index = {};
+  try {
+    const raw = await fs.readFile(indexPath, "utf-8");
+    index = JSON.parse(raw);
+  } catch (err) {
+    if (err.code !== "ENOENT") debug("tags_index.json read/parse error: %O", err);
+  }
+
+  for (const tag of Object.keys(index)) {
+    index[tag] = index[tag].filter((e) => e.date !== date);
+    if (index[tag].length === 0) delete index[tag];
+  }
+
+  const normalizedTags = tags.map((t) => t.toLowerCase()).filter(Boolean);
+  for (const tag of normalizedTags) {
+    if (!index[tag]) index[tag] = [];
+    index[tag].push({ date, title });
+    index[tag].sort((a, b) => ddmmyyyyToSortKey(b.date) - ddmmyyyyToSortKey(a.date));
+  }
+
+  await fs.writeFile(indexPath, JSON.stringify(index, null, 2), "utf-8");
+  invalidateDateCache();
+}
+
+async function updateTagsIndex() {
   const index = {};
 
   const years = await fs.readdir(postsDir);
   for (const year of years) {
     const yearPath = path.join(postsDir, year);
-    if (!(await fs.stat(yearPath)).isDirectory()) {
-      continue;
-    }
+    if (!(await fs.stat(yearPath)).isDirectory()) continue;
 
     const months = await fs.readdir(yearPath);
     for (const month of months) {
       const monthPath = path.join(yearPath, month);
-      if (!(await fs.stat(monthPath)).isDirectory()) {
-        continue;
-      }
+      if (!(await fs.stat(monthPath)).isDirectory()) continue;
 
       const days = await fs.readdir(monthPath);
       for (const dayFile of days) {
-        if (!dayFile.endsWith(".md")) {
-          continue;
-        }
+        if (!dayFile.endsWith(".md")) continue;
 
         const day = dayFile.slice(0, 2);
-        const date = `${day}${month}${year}`; // DDMMYYYY
+        const date = `${day}${month}${year}`;
         const filePath = path.join(monthPath, dayFile);
         const fileContents = await fs.readFile(filePath, "utf-8");
         const parsed = await parseBlogEntry(fileContents);
@@ -227,13 +214,15 @@ async function updateTagsIndex() { // allow this to run in background
         const title = (parsed.title || "").trim();
 
         for (const tag of tags) {
-          if (!index[tag]) {
-            index[tag] = [];
-          }
+          if (!index[tag]) index[tag] = [];
           index[tag].push({ date, title });
         }
       }
     }
+  }
+
+  for (const tag of Object.keys(index)) {
+    index[tag].sort((a, b) => ddmmyyyyToSortKey(b.date) - ddmmyyyyToSortKey(a.date));
   }
 
   await fs.writeFile(
@@ -246,20 +235,17 @@ async function updateTagsIndex() { // allow this to run in background
 }
 
 async function parseBlogEntry(blob) {
-  // Split into lines and examine the top section for metadata lines.
   const lines = blob.split("\n");
 
   let title = "";
   let tags = [];
   let date = "";
 
-  // Metadata appears at the top of the entry. Scan until we hit an empty line
-  // or until we've consumed the first non-metadata line.
   let metadataEndIndex = 0;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
     if (line === "") {
-      metadataEndIndex = i + 1; // content starts after blank line
+      metadataEndIndex = i + 1;
       break;
     }
 
@@ -287,23 +273,13 @@ async function parseBlogEntry(blob) {
       continue;
     }
 
-    // If the line doesn't match any metadata pattern, assume metadata block ended
-    // and treat the rest as content.
     metadataEndIndex = i;
     break;
   }
 
-  // If we scanned all lines without finding a blank line or content, set end to lines.length
   if (metadataEndIndex === 0) metadataEndIndex = Math.min(lines.length, 3);
 
   const content = lines.slice(metadataEndIndex).join("\n").trim();
-
-  /*
-  debug("Extracted title:", title);
-  debug("Extracted tags:", tags);
-  debug("Extracted date:", date);
-  debug("Content length:", content.length);
-  */
 
   return { title, tags, date, content };
 }
@@ -316,5 +292,8 @@ module.exports = {
   formatDate,
   formatDates,
   updateTagsIndex,
+  updateTagsIndexForPost,
+  getSortedDates,
+  invalidateDateCache,
   parseBlogEntry,
 };

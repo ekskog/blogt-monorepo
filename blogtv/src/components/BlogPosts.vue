@@ -101,6 +101,7 @@ import { ref, onMounted, reactive } from 'vue'
 import { marked } from 'marked'
 import { postStore } from '@/stores/posts'
 import CryptoJS from 'crypto-js'
+import { API_BASE, MEDIA_BASE } from '@/config'
 
 export default {
   name: 'BlogPosts',
@@ -181,7 +182,7 @@ export default {
         const day = dateMatch[1]
         const month = dateMatch[2]
         const year = dateMatch[3]
-        let dateUrl = `https://objects.ekskog.net/blotpix/${year}/${month}/${day}.jpeg`
+        let dateUrl = `${MEDIA_BASE}/blotpix/${year}/${month}/${day}.jpeg`
         return dateUrl
       }
       console.error('Invalid Date format in metadata:', post)
@@ -192,7 +193,7 @@ export default {
       try {
         isLoading.value = true
         console.log('fetch latest posts...')
-        const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/post`)
+        const response = await fetch(`${API_BASE}/post`)
         if (!response.ok) {
           throw new Error('Failed to fetch first page posts')
         }
@@ -234,7 +235,7 @@ export default {
 
         console.log('fetchNextPage > Will Fetch:', dateToFetch)
 
-        const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/posts/from/${dateToFetch}`)
+        const response = await fetch(`${API_BASE}/posts/from/${dateToFetch}`)
         if (!response.ok) {
           throw new Error('Failed to fetch next posts')
         }
@@ -279,7 +280,7 @@ export default {
         const dateToFetch = `${nextDay}${nextMonth}${nextYear}`
         console.log(`Date to fetch from: ${nextDay} - ${nextMonth} - ${nextYear}`)
 
-        const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/posts/from/${dateToFetch}`)
+        const response = await fetch(`${API_BASE}/posts/from/${dateToFetch}`)
 
         if (!response.ok) {
           throw new Error('Failed to fetch next posts')

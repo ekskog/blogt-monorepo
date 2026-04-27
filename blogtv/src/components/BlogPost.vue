@@ -1,20 +1,23 @@
 <template>
   <div class="max-w-[800px] mx-auto px-4 sm:px-6 md:px-[50px] py-6 sm:py-8 md:py-[50px] rounded-lg shadow-[0_2px_8px_rgba(0,0,0,0.4)] text-gray-800">
-    <div v-if="post">
+    <div v-if="loading" class="flex items-center justify-center py-20 text-gray-500 text-sm">
+      Loading…
+    </div>
+    <div v-else-if="post">
       <!-- Title -->
       <h2 class="text-xl sm:text-2xl uppercase font-bold mb-4 text-left">
-        {{ extractTitle(post) }}
+        {{ post.title }}
       </h2>
 
       <!-- Geotag -->
-      <div v-if="extractGeotag(post)" class="mb-2">
+      <div v-if="geotag" class="mb-2">
         <a
-          :href="extractGeotag(post)?.url"
+          :href="geotag.url"
           target="_blank"
           rel="noopener noreferrer"
           class="text-xs text-black no-underline hover:underline"
         >
-          @ {{ extractGeotag(post)?.text }}
+          @ {{ geotag.text }}
         </a>
       </div>
 
@@ -25,7 +28,7 @@
             Fetching Image...
           </div>
           <img
-            :src="getImageUrl(post)"
+            :src="post.imageUrl"
             alt="Post Image"
             class="w-full h-auto max-w-full sm:max-w-[800px] border border-gray-800 cursor-pointer transition-transform duration-300 ease-in-out hover:scale-[1.02] hover:shadow-[0_5px_15px_rgba(0,0,0,0.3)]"
             @load="onImageLoaded"
@@ -34,7 +37,7 @@
             @click="openImageModal"
           />
           <figcaption v-show="!imageLoading" class="mt-1 text-xs text-center">
-            {{ calculateCaption(post) }}
+            {{ caption }}
           </figcaption>
         </figure>
       </div>
@@ -55,7 +58,7 @@
             </button>
           </div>
           <img
-            :src="getImageUrl(post)"
+            :src="post.imageUrl"
             alt="Full Resolution Image"
             class="max-w-full max-h-[calc(100vh-100px)] object-contain"
           />
@@ -80,17 +83,17 @@
 
       <!-- EXIF Viewer -->
       <div v-if="showExifData" class="mt-5 mb-5 p-4 border border-gray-300 rounded bg-gray-200">
-        <ExifViewer :initialImageUrl="getImageUrl(post)" />
+        <ExifViewer :initialImageUrl="post.imageUrl" />
       </div>
 
       <!-- Gemini AI Viewer -->
       <div v-if="showGeminiData" class="mt-5 mb-5 p-4 border border-gray-300 rounded bg-gray-200">
-        <GeminiViewer :initialImageUrl="getImageUrl(post)" />
+        <GeminiViewer :initialImageUrl="post.imageUrl" />
       </div>
 
       <!-- Markdown Content -->
       <div class="pt-8 text-base sm:text-[1.2em] md:text-[1.4em] leading-relaxed">
-        <div v-html="renderMarkdown(removeGeotag(removeMetadata(post)))"></div>
+        <div v-html="renderedContent"></div>
       </div>
 
       <!-- Tags -->
@@ -98,47 +101,43 @@
         <span class="font-bold pr-6 hover:text-blue-300">
           {{ date }}
         </span>
-        <template v-for="(tag, index) in extractTags(post).split(',')" :key="index">
+        <template v-for="(tag, index) in post.tags" :key="index">
           <span class="font-bold uppercase mx-1">
             <router-link class="text-black hover:text-blue-300" :to="{ name: 'search', query: { tag: tag.trim() } }">
               {{ tag.trim() }}
             </router-link>
           </span>
-          <span v-if="index < extractTags(post).split(',').length - 1" class="text-gray-400 mx-1">|</span>
+          <span v-if="index < post.tags.length - 1" class="text-gray-400 mx-1">|</span>
         </template>
       </div>
 
       <!-- Pagination Controls -->
       <div class="flex flex-wrap justify-between mt-10 gap-2 px-2 sm:px-5">
         <button
-          @click="navigateToPreviousDay"
+          @click="navigateToPrev"
           class="px-3 py-1 sm:px-4 sm:py-2 min-w-[80px] border border-black bg-gray-100 rounded hover:bg-gray-200 text-xs sm:text-sm"
-          :disabled="navigationLoading"
+          :disabled="!post.prev"
         >
-          <span v-if="navigationLoading && previousLoading">Searching...</span>
-          <span v-else>{{ '< 1' }}</span>
+          {{ '< 1' }}
         </button>
         <button
           @click="navigateToPreviousYear"
           class="px-3 py-1 sm:px-4 sm:py-2 min-w-[80px] border border-black bg-gray-100 rounded hover:bg-gray-200 text-xs sm:text-sm"
-          :disabled="navigationLoading"
         >
           {{ '< 365' }}
         </button>
         <button
           @click="navigateToNextYear"
           class="px-3 py-1 sm:px-4 sm:py-2 min-w-[80px] border border-black bg-gray-100 rounded hover:bg-gray-200 text-xs sm:text-sm"
-          :disabled="navigationLoading"
         >
           {{ '> 365' }}
         </button>
         <button
-          @click="navigateToNextDay"
+          @click="navigateToNext"
           class="px-3 py-1 sm:px-4 sm:py-2 min-w-[80px] border border-black bg-gray-100 rounded hover:bg-gray-200 text-xs sm:text-sm"
-          :disabled="navigationLoading"
+          :disabled="!post.next"
         >
-          <span v-if="navigationLoading && nextLoading">Searching...</span>
-          <span v-else>{{ '> 1' }}</span>
+          {{ '> 1' }}
         </button>
       </div>
     </div>
@@ -146,12 +145,12 @@
 </template>
 
 <script>
-//import { ref } from 'vue'
 import { postStore } from '@/stores/posts'
 import { marked } from 'marked'
 import CryptoJS from 'crypto-js'
-import ExifViewer from './ExifViewer.vue' // Import ExifViewer component
-import GeminiViewer from './GeminiViewer.vue' // Import GeminiViewer component
+import ExifViewer from './ExifViewer.vue'
+import GeminiViewer from './GeminiViewer.vue'
+import { API_BASE } from '@/config'
 
 export default {
   name: 'BlogPost',
@@ -162,324 +161,117 @@ export default {
   data() {
     return {
       date: this.$route.params.date,
-      post: postStore.currentPost,
+      post: null,
       showExifData: false,
       showGeminiData: false,
-      showImageModal: false, // New data property for image modal
+      showImageModal: false,
       loading: false,
-      imageLoading: true, // Added for image loading state
-      navigationLoading: false, // General navigation loading state
-      nextLoading: false, // Specific to next button
-      previousLoading: false, // Specific to previous button
+      imageLoading: true,
     }
   },
 
-  mounted() {
-    if (!this.post) {
-      console.warn('Post is not yet set, skipping image fetch.')
-      return
-    }
-
-    const img = new Image()
-    img.onload = () => {
-      this.imageLoading = false
-    }
-    img.src = this.getImageUrl(this.post)
+  computed: {
+    geotag() {
+      if (!this.post?.content) return null
+      const m = this.post.content.match(/\[(.*?)\]\((https:\/\/maps\.app\.goo\.gl\/[^\s)]+)\)/)
+      return m ? { text: m[1], url: m[2] } : null
+    },
+    renderedContent() {
+      if (!this.post?.content) return ''
+      const cleaned = this.post.content
+        .replace(/\[.*?\]\(https:\/\/maps\.app\.goo\.gl\/[^\s)]+\)\s*/g, '')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim()
+      return marked(cleaned)
+    },
+    caption() {
+      if (!this.post?.content) return ''
+      return CryptoJS.MD5(this.post.content).toString()
+    },
   },
 
   watch: {
     '$route.params.date': {
       immediate: true,
       async handler(newDate) {
-        console.log('Detected route change, new date:', newDate)
         if (newDate) {
           this.date = newDate
-          this.imageLoading = true // Reset image loading state when route changes
-          this.loadPost(newDate) // Fetch the new post
-          if (this.post) {
-            console.log('Post fetched, now updating image...')
-            this.imageLoading = false
-          }
-        } else {
-          console.error('No date provided in route params!')
-          this.post = null // Clear the post if date is invalid
-        }
-      },
-    },
-
-    post: {
-      handler() {
-        // Reset image loading state when post data changes
-        if (this.post) {
           this.imageLoading = true
+          await this.loadPost(newDate)
+        } else {
+          this.post = null
         }
       },
     },
   },
 
   methods: {
-    // Image modal methods
     openImageModal() {
       this.showImageModal = true
-      // Add a class to body to prevent scrolling when modal is open
       document.body.classList.add('modal-open')
     },
-
     closeImageModal() {
       this.showImageModal = false
-      // Remove the class from body when modal is closed
       document.body.classList.remove('modal-open')
     },
-
     toggleExifData() {
       this.showExifData = !this.showExifData
     },
     toggleGeminiData() {
       this.showGeminiData = !this.showGeminiData
     },
-
     onImageLoaded() {
-      // Image has finished loading
-      console.log('Image loaded successfully')
       this.imageLoading = false
     },
-
     onImageError() {
-      // Handle image loading error
-      console.error('Error loading image')
       this.imageLoading = false
     },
 
     async loadPost(date) {
       try {
         this.loading = true
-        this.imageLoading = true // Reset image loading state
-        const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/post/${date}`)
-        if (!response.ok) {
-          throw new Error('error fetching post')
-        } else {
-          const data = await response.json()
-          console.log(`DEBUG >> ${data}`)
-          const postContent = data[0]
-          postStore.setCurrentPost(postContent)
-          this.post = postContent
-          this.loading = false
-        }
+        this.imageLoading = true
+        const response = await fetch(`${API_BASE}/post/details/${date}`)
+        if (!response.ok) throw new Error('error fetching post')
+        const data = await response.json()
+        this.post = data
+        postStore.setCurrentPost(data)
       } catch (error) {
         alert(error.message + ` >> no post for ${date}`)
+      } finally {
         this.loading = false
       }
     },
 
-    getImageUrl(post) {
-      if (!post) {
-        console.error('getImageUrl called with null post!')
-        return ''
+    navigateToPrev() {
+      if (this.post?.prev) {
+        this.$router.push({ name: 'post', params: { date: this.post.prev } })
       }
-
-      const dateMatch = post.match(/Date:\s*(\d{2})(\d{2})(\d{4})/)
-      if (dateMatch) {
-        const [, day, month, year] = dateMatch
-        return `https://objects.ekskog.net/blotpix/${year}/${month}/${day}.jpeg`
+    },
+    navigateToNext() {
+      if (this.post?.next) {
+        this.$router.push({ name: 'post', params: { date: this.post.next } })
       }
-      console.error('Invalid Date format in metadata:', post)
-      return ''
     },
 
-    calculateCaption(post) {
-      const MD5Caption = CryptoJS.MD5(post).toString()
-      return MD5Caption
-    },
-    extractTags(post) {
-      const tagsMatch = post.match(/^Tags:\s*(.+)$/m)
-      const tags = tagsMatch ? tagsMatch[1].trim() : 'No Tags'
-      return tags
-    },
-    removeGeotag(content) {
-      return content
-        .replace(/\[.*?\]\(https:\/\/maps\.app\.goo\.gl\/[^\s)]+\)\s*/g, '')
-        .replace(/\n{3,}/g, '\n\n')
-        .trim()
-    },
-    extractGeotag(post) {
-      const cleanedPost = this.removeMetadata(post)
-      const geotagMatch = cleanedPost.match(/\[(.*?)\]\((https:\/\/maps\.app\.goo\.gl\/[^\s)]+)\)/)
-      return geotagMatch
-        ? {
-            text: geotagMatch[1],
-            url: geotagMatch[2],
-          }
-        : null
-    },
-    extractTitle(post) {
-      const titleMatch = post.match(/Title:\s*([^\n]+)/)
-      const title = titleMatch ? titleMatch[1].trim() : 'Untitled'
-      return title
-    },
-    removeMetadata(post) {
-      const cleanedPost = post.replace(/^(Date:.*|Tags:.*|Title:.*)$/gm, '').trim()
-      return cleanedPost
-    },
-    renderMarkdown(markdown) {
-      return marked(markdown)
-    },
     parseDateString() {
       const day = parseInt(this.date.slice(0, 2))
       const month = parseInt(this.date.slice(2, 4)) - 1
       const year = parseInt(this.date.slice(4, 8))
-      let parsedDate = new Date(year, month, day)
-      return parsedDate // Return Date object
-    },
-
-    async navigateToNextDay() {
-      const inputDate = this.parseDateString()
-
-      // Show loading indicator in UI
-      this.navigationLoading = true
-      this.nextLoading = true
-
-      // Find the next available post
-      const nextPostDate = await this.findNextAvailablePost(inputDate)
-
-      if (nextPostDate) {
-        console.log('Found next available post for date:', nextPostDate)
-        this.$router.push({ name: 'post', params: { date: nextPostDate } })
-      } else {
-        console.log('No next post found')
-        alert('No more posts found in the next 60 days')
-        this.navigationLoading = false
-        this.nextLoading = false
-      }
-    },
-
-    async navigateToPreviousDay() {
-      const inputDate = this.parseDateString()
-
-      // Show loading indicator in UI
-      this.navigationLoading = true
-      this.previousLoading = true
-
-      // Find the previous available post
-      const previousPostDate = await this.findPreviousAvailablePost(inputDate)
-
-      if (previousPostDate) {
-        console.log('Found previous available post for date:', previousPostDate)
-        this.$router.push({ name: 'post', params: { date: previousPostDate } })
-      } else {
-        console.log('No previous post found')
-        alert('No more posts found in the previous 60 days')
-        this.navigationLoading = false
-        this.previousLoading = false
-      }
-    },
-
-    navigateToNextYear() {
-      console.log('NAVIGATE TO NEXT YEAR')
-      const inputDate = this.parseDateString()
-      // Calculate the date for the next year
-      const nextYear = new Date(inputDate)
-      nextYear.setFullYear(inputDate.getFullYear() + 1)
-      const nextYearFormatted = this.formatDateStr(nextYear) // Format the date
-      console.log('Navigating to same day, next year:', nextYearFormatted)
-      this.$router.push({ name: 'post', params: { date: nextYearFormatted } }) // Route to next day
-    },
-
-    navigateToPreviousYear() {
-      console.log('NAVIGATE TO PREVIOUS YEAR')
-      const inputDate = this.parseDateString()
-      // Calculate the date for the previous year
-      const previousYear = new Date(inputDate)
-      previousYear.setFullYear(inputDate.getFullYear() - 1)
-      const previousYearFormatted = this.formatDateStr(previousYear) // Format the date
-      console.log('Navigating to same day, previous year:', previousYearFormatted)
-      this.$router.push({ name: 'post', params: { date: previousYearFormatted } }) // Route to next day
+      return new Date(year, month, day)
     },
     formatDateStr(date) {
-      // Formats the date as DDMMYYYY
       return `${('0' + date.getDate()).slice(-2)}${('0' + (date.getMonth() + 1)).slice(-2)}${date.getFullYear()}`
     },
-
-    async checkPostExists(date) {
-      try {
-        const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/post/${date}`)
-        return response.ok
-      } catch (error) {
-        console.error(`Error checking if post exists for ${date}:`, error)
-        return false
-      }
+    navigateToNextYear() {
+      const d = this.parseDateString()
+      d.setFullYear(d.getFullYear() + 1)
+      this.$router.push({ name: 'post', params: { date: this.formatDateStr(d) } })
     },
-
-    async findNextAvailablePost(startDate) {
-      this.navigationLoading = true
-
-      let currentDate = new Date(startDate)
-      let attempts = 0
-      const maxAttempts = 60 // Maximum days to search ahead
-
-      while (attempts < maxAttempts) {
-        // Move to next day
-        currentDate.setDate(currentDate.getDate() + 1)
-
-        // Don't go beyond today's date
-        if (currentDate > new Date()) {
-          console.log('Reached current date, stopping search')
-          this.navigationLoading = false
-          return null
-        }
-
-        const formattedDate = this.formatDateStr(currentDate)
-        console.log(`Checking if post exists for ${formattedDate}...`)
-
-        const exists = await this.checkPostExists(formattedDate)
-
-        if (exists) {
-          this.navigationLoading = false
-          return formattedDate
-        }
-
-        attempts++
-      }
-
-      console.log(`No posts found after checking ${maxAttempts} days`)
-      this.navigationLoading = false
-      return null
-    },
-
-    async findPreviousAvailablePost(startDate) {
-      this.navigationLoading = true
-
-      let currentDate = new Date(startDate)
-      let attempts = 0
-      const maxAttempts = 60 // Maximum days to search back
-
-      while (attempts < maxAttempts) {
-        // Move to previous day
-        currentDate.setDate(currentDate.getDate() - 1)
-
-        // Don't go before the blog's start date
-        if (currentDate < new Date(2010, 0, 1)) {
-          // Assuming blog starts from Jan 1, 2010
-          console.log('Reached blog start date, stopping search')
-          this.navigationLoading = false
-          return null
-        }
-
-        const formattedDate = this.formatDateStr(currentDate)
-        console.log(`Checking if post exists for ${formattedDate}...`)
-
-        const exists = await this.checkPostExists(formattedDate)
-
-        if (exists) {
-          this.navigationLoading = false
-          return formattedDate
-        }
-
-        attempts++
-      }
-
-      console.log(`No posts found after checking ${maxAttempts} days`)
-      this.navigationLoading = false
-      return null
+    navigateToPreviousYear() {
+      const d = this.parseDateString()
+      d.setFullYear(d.getFullYear() - 1)
+      this.$router.push({ name: 'post', params: { date: this.formatDateStr(d) } })
     },
   },
 }

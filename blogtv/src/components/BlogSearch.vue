@@ -66,7 +66,8 @@
 </template>
 
 <script>
-import moment from 'moment'; // You might need to install this: npm install moment
+import moment from 'moment'
+import { API_BASE } from '@/config'
 
 export default {
   name: 'BlogSearch',
@@ -116,7 +117,7 @@ export default {
       try {
         console.log('Performing search for tag:', this.searchTag);
         const response = await fetch(
-          `${import.meta.env.VITE_API_BASE_URL}/tags/${encodeURIComponent(this.searchTag)}`,
+          `${API_BASE}/tags/${encodeURIComponent(this.searchTag)}`,
         );
         console.log('Response:', response);
         if (!response.ok) {

@@ -8,12 +8,14 @@ const fs = require("fs").promises;
 const postsDir = path.join(__dirname, "..", "posts");
 debug("Posts directory:", postsDir);
 
+const MEDIA_BASE = process.env.MEDIA_BASE || "https://objects.ekskog.net";
+
 const {
-  findLatestPost,
   getPostsArray,
   formatDate,
   formatDates,
-  updateTagsIndex,
+  updateTagsIndexForPost,
+  getSortedDates,
   getNext,
   getPrev,
   parseBlogEntry,
@@ -21,23 +23,26 @@ const {
 
 // GET LATEST 10 POSTS
 router.get("/", async (req, res) => {
-  const { latestPostPath, latestPostDate } = await findLatestPost();
-  if (!latestPostPath || !latestPostDate) {
-    return res.status(404).json({ error: "No posts found" });
+  try {
+    const dates = await getSortedDates();
+    if (!dates.length) return res.status(404).json({ error: "No posts found" });
+    const latest = dates[dates.length - 1];
+    debug(`[MAIN] Latest post date: ${latest}`);
+    const postsArray = await getPostsArray(latest);
+    res.send(postsArray);
+  } catch (err) {
+    debug("Error fetching posts: %O", err);
+    res.status(500).json({ error: "Internal server error" });
   }
-  var dateString = await formatDate(latestPostDate);
-  debug(`[MAIN] Latest post date: ${latestPostDate}`);
-  let postsArray = await getPostsArray(dateString);
-  res.send(postsArray);
 });
 
-// Create a new post using
+// Create a new post
 router.post("/:date", async (req, res) => {
   try {
     const { title, tags = [], content = "" } = req.body;
     const { date } = req.params;
-    
-    debug("Editing post for: ", date)
+
+    debug("Editing post for: ", date);
 
     const [day, month, year] = [
       date.slice(0, 2),
@@ -46,8 +51,7 @@ router.post("/:date", async (req, res) => {
     ];
 
     const dirPath = path.join(postsDir, year, month);
-    debug("Save at: ", dirPath)
-    console.time("Creating new post");
+    debug("Save at: ", dirPath);
     await fs.mkdir(dirPath, { recursive: true });
 
     const dateLine = `Date: ${date}`;
@@ -57,21 +61,21 @@ router.post("/:date", async (req, res) => {
 
     const filePath = path.join(dirPath, `${day}.md`);
     await fs.writeFile(filePath, newEntry, "utf-8");
-    console.timeEnd("Creating new post");
-    console.time("Updating tags index");
-    updateTagsIndex();
-    console.timeEnd("Updating tags index");
+
+    updateTagsIndexForPost(date, title, tags).catch((err) =>
+      debug("tag index update failed: %O", err)
+    );
 
     res
       .status(201)
       .json({ message: "Post created", path: `${year}/${month}/${day}.md` });
   } catch (error) {
-    console.error("Error creating post:", error);
+    debug("Error creating post: %O", error);
     res.status(500).json({ error: "Failed to create post" });
   }
 });
 
-// Get structured details for a single post using YYYY-MM-DD
+// Get structured details for a single post using DDMMYYYY
 router.get("/details/:date", async (req, res) => {
   const { date } = req.params;
   debug("Details request for date:", date);
@@ -85,19 +89,12 @@ router.get("/details/:date", async (req, res) => {
   debug("File path:", filePath);
 
   try {
-    console.time("Reading post file for details");
     const raw = await fs.readFile(filePath, "utf-8");
-    console.timeEnd("Reading post file for details");
-    console.time("Parsing post file for details");
     const parsed = await parseBlogEntry(raw);
-    console.timeEnd("Parsing post file for details");
 
-    const [prev, next] = await Promise.all([
-      getPrev(date),
-      getNext(date),
-    ]);
+    const [prev, next] = await Promise.all([getPrev(date), getNext(date)]);
 
-    const imageUrl = `https://objects.hbvu.su/blotpix/${year}/${month}/${day}.jpeg`;
+    const imageUrl = `${MEDIA_BASE}/blotpix/${year}/${month}/${day}.jpeg`;
     const blogEntry = {
       date: parsed.date,
       title: parsed.title,
@@ -111,7 +108,7 @@ router.get("/details/:date", async (req, res) => {
 
     res.json(blogEntry);
   } catch (error) {
-    console.error("Error reading post file:", error);
+    debug("Error reading post file: %O", error);
     if (error.code === "ENOENT") {
       return res.status(404).json({ error: "Post not found" });
     }
@@ -119,7 +116,7 @@ router.get("/details/:date", async (req, res) => {
   }
 });
 
-// Update an existing post using YYYY-MM-DD
+// Update an existing post using DDMMYYYY
 router.put("/:date", async (req, res) => {
   let { date } = req.params;
   debug("Update request for date:", date);
@@ -130,7 +127,6 @@ router.put("/:date", async (req, res) => {
   if (!title) {
     return res.status(400).json({ error: "title is required" });
   }
-  // Accept tags either as an array or a comma-separated string
   let normalizedTags = tags;
   if (!Array.isArray(normalizedTags) && typeof normalizedTags === "string") {
     normalizedTags = normalizedTags
@@ -148,7 +144,6 @@ router.put("/:date", async (req, res) => {
   debug("File path:", filePath);
 
   try {
-    // Ensure the file exists before overwriting
     await fs.access(filePath);
 
     const dateLine = `Date: ${date}`;
@@ -157,17 +152,12 @@ router.put("/:date", async (req, res) => {
     const body = [dateLine, tagsLine, titleLine, content].join("\n");
 
     await fs.writeFile(filePath, body, "utf-8");
-    await updateTagsIndex();
+    await updateTagsIndexForPost(`${day}${month}${year}`, title, normalizedTags);
 
-    // Reuse the details logic to return the updated post
     const ddmmyyyy = `${day}${month}${year}`;
-    const [prev, next] = await Promise.all([
-      getPrev(ddmmyyyy),
-      getNext(ddmmyyyy),
-    ]);
+    const [prev, next] = await Promise.all([getPrev(ddmmyyyy), getNext(ddmmyyyy)]);
 
-
-    const imageUrl = `https://objects.hbvu.su/blotpix/${year}/${month}/${day}.jpeg`;
+    const imageUrl = `${MEDIA_BASE}/blotpix/${year}/${month}/${day}.jpeg`;
 
     res.json({
       date,
@@ -180,15 +170,13 @@ router.put("/:date", async (req, res) => {
       imageUrl,
     });
   } catch (error) {
-    console.error("Error updating post:", error);
+    debug("Error updating post: %O", error);
     if (error.code === "ENOENT") {
       return res.status(404).json({ error: "Post not found" });
     }
     res.status(500).json({ error: "Failed to update post" });
   }
 });
-
-
 
 router.get("/from/:startDate", async (req, res) => {
   const { startDate } = req.params;
@@ -208,7 +196,6 @@ router.get("/from/:startDate", async (req, res) => {
 router.get("/:dateString", async (req, res) => {
   const { dateString } = req.params;
 
-  // Ensure dateString is in the format DDMMYYYY
   if (!/^\d{8}$/.test(dateString)) {
     return res.status(400).send("Invalid date format. Use DDMMYYYY.");
   }
@@ -217,20 +204,17 @@ router.get("/:dateString", async (req, res) => {
   const month = dateString.slice(2, 4);
   const year = dateString.slice(4, 8);
 
-  // Use moment to ensure we are manipulating only the date (start of the day)
   let filePath = path.join(postsDir, year, month, `${day}.md`);
   debug("File path:", filePath);
 
   const postsArray = [];
 
   try {
-    console.log("Reading file:", filePath);
     const data = await fs.readFile(filePath, "utf-8");
     postsArray.push(data);
-    // Send the file content as response
     res.send(postsArray);
   } catch (err) {
-    console.error("Error reading post file:", err);
+    debug("Error reading post file: %O", err);
     res.status(404).send("Post not found");
   }
 });
